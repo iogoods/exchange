@@ -1,12 +1,10 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const walletSchema = mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  balance: {
-    BTC: { type: Number, default: 0 },
-    ETH: { type: Number, default: 0 },
-    USDT: { type: Number, default: 0 },
-  },
-}, { timestamps: true });
+const WalletSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  currency: { type: String, required: true },
+  balance: { type: Number, default: 0 },
+  depositAddress: { type: String, required: true },
+});
 
-module.exports = mongoose.model("Wallet", walletSchema);
+module.exports = mongoose.model('Wallet', WalletSchema);
