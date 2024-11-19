@@ -1,0 +1,18 @@
+export const coins = [
+  { name: "Bitcoin", symbol: "btcusdt" },
+  { name: "Ethereum", symbol: "ethusdt" },
+  { name: "Cardano", symbol: "adausdt" },
+  { name: "Ripple", symbol: "xrpusdt" },
+  { name: "Dogecoin", symbol: "dogeusdt" },
+  { name: "Solana", symbol: "solusdt" },
+  { name: "Polkadot", symbol: "dotusdt" },
+  { name: "Shiba Inu", symbol: "shibusdt" },
+  { name: "Litecoin", symbol: "ltcusdt" },
+  { name: "Chainlink", symbol: "linkusdt" },
+  { name: "Stellar", symbol: "xlmusdt" },
+  { name: "Avalanche", symbol: "avaxusdt" },
+  { name: "Uniswap", symbol: "uniusdt" },
+  { name: "Monero", symbol: "xmrusdt" },
+  { name: "VeChain", symbol: "vetusdt" },
+  { name: "Tron", symbol: "trxusdt" },
+];
