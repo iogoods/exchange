@@ -1,12 +1,14 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const orderSchema = mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  type: { type: String, enum: ["buy", "sell"], required: true },
-  pair: { type: String, required: true }, // z.B. BTC/USDT
-  price: { type: Number, required: true },
+const orderSchema = new mongoose.Schema({
+  userId: { type: String, required: true }, // Verknüpft mit dem Benutzer
+  type: { type: String, enum: ['BUY', 'SELL'], required: true },
+  symbol: { type: String, required: true },
   amount: { type: Number, required: true },
-  status: { type: String, enum: ["open", "fulfilled", "cancelled"], default: "open" },
-}, { timestamps: true });
+  price: { type: String, required: true }, // 'Market Price' oder spezifischer Preis
+  orderType: { type: String, enum: ['limit', 'market'], required: true },
+  status: { type: String, enum: ['Open', 'Executed', 'Closed'], required: true },
+  timestamp: { type: Date, default: Date.now },
+});
 
-module.exports = mongoose.model("Order", orderSchema);
+module.exports = mongoose.model('Order', orderSchema);

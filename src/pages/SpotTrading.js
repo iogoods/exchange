@@ -4,22 +4,22 @@ import TradingChart from '../components/TradingChart';
 import { coins } from '../data/coinData';
 
 const SpotTradingPage = () => {
-  const { symbol } = useParams(); // Dynamisches Symbol aus URL
+  const { symbol } = useParams();
   const navigate = useNavigate();
-  const [selectedSymbol, setSelectedSymbol] = useState(symbol || 'BTCUSDT'); // Standard-Symbol: BTC/USDT
+  const [selectedSymbol, setSelectedSymbol] = useState(symbol || 'BTCUSDT');
   const [searchTerm, setSearchTerm] = useState('');
   const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
-  const [orderType, setOrderType] = useState('limit'); // "limit" oder "market"
+  const [orderType, setOrderType] = useState('limit'); // Default: Limit Order
+  const [openPositions, setOpenPositions] = useState([]);
+  const [tradeHistory, setTradeHistory] = useState([]);
 
   useEffect(() => {
-    // Aktualisiere das ausgewählte Symbol basierend auf der URL
     if (symbol) {
       setSelectedSymbol(symbol.toUpperCase());
     }
   }, [symbol]);
 
   useEffect(() => {
-    // WebSocket für Order Book
     const ws = new WebSocket(
       `wss://stream.binance.com:9443/ws/${selectedSymbol.toLowerCase()}@depth10`
     );
@@ -42,9 +42,41 @@ const SpotTradingPage = () => {
     navigate(`/spot/${newSymbol}`);
   };
 
-  const handleTrade = (type, amount, price = 'Market Price') => {
-    console.log(`${type.toUpperCase()} ${amount} ${selectedSymbol} at ${price}`);
-    alert(`${type.toUpperCase()} ${amount} ${selectedSymbol} at ${price}`);
+  const handleTrade = (type, amount, price) => {
+    const isMarketOrder = orderType === 'market';
+    const tradePrice = isMarketOrder ? 'Market Price' : price;
+
+    const newTrade = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: type.toUpperCase(),
+      amount,
+      price: tradePrice,
+      symbol: selectedSymbol,
+      orderType,
+      timestamp: new Date().toLocaleString(),
+    };
+
+    // Position eröffnen
+    setOpenPositions([...openPositions, newTrade]);
+
+    // Historie aktualisieren
+    setTradeHistory([...tradeHistory, { ...newTrade, status: 'Executed' }]);
+
+    alert(
+      `${type.toUpperCase()} ${amount} ${selectedSymbol} at ${
+        isMarketOrder ? 'Market Price' : `$${price}`
+      }`
+    );
+  };
+
+  const handleClosePosition = (id) => {
+    const positionToClose = openPositions.find((position) => position.id === id);
+    setOpenPositions(openPositions.filter((position) => position.id !== id));
+    setTradeHistory([
+      ...tradeHistory,
+      { ...positionToClose, status: 'Closed', closeTime: new Date().toLocaleString() },
+    ]);
+    alert(`Position ${id} closed.`);
   };
 
   return (
@@ -92,10 +124,7 @@ const SpotTradingPage = () => {
         {/* Order Book */}
         <div className="bg-gray-800 p-6 rounded shadow-lg">
           <h2 className="text-xl font-bold text-white">Order Book</h2>
-
-          {/* Order Book Spalten */}
           <div className="grid grid-cols-1">
-            {/* Verkauf-Orders (Asks) */}
             <div className="border-b border-gray-600 pb-2 mb-2">
               <h3 className="text-red-400 font-bold text-center">Asks (Sell Orders)</h3>
               <ul className="mt-2 max-h-[200px] overflow-y-auto flex flex-col-reverse">
@@ -107,8 +136,6 @@ const SpotTradingPage = () => {
                 ))}
               </ul>
             </div>
-
-            {/* Kauf-Orders (Bids) */}
             <div>
               <h3 className="text-green-400 font-bold text-center">Bids (Buy Orders)</h3>
               <ul className="mt-2 max-h-[200px] overflow-y-auto">
@@ -154,14 +181,10 @@ const SpotTradingPage = () => {
           </button>
         </div>
 
-        {/* Limit Order Form */}
         {orderType === 'limit' && (
           <div className="grid grid-cols-2 gap-8">
-            {/* Buy Limit Order */}
             <div className="bg-gray-900 p-6 rounded">
-              <h3 className="text-xl font-bold text-green-400 mb-4 text-center">
-                Buy Limit
-              </h3>
+              <h3 className="text-xl font-bold text-green-400 mb-4 text-center">Buy Limit</h3>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -171,26 +194,20 @@ const SpotTradingPage = () => {
                 }}
               >
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-gray-300 mb-1">Amount</label>
-                    <input
-                      type="number"
-                      name="amount"
-                      placeholder="Enter amount"
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-300 mb-1">Price</label>
-                    <input
-                      type="number"
-                      name="price"
-                      placeholder="Enter price per unit"
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      required
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    name="amount"
+                    placeholder="Amount"
+                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    required
+                  />
+                  <input
+                    type="number"
+                    name="price"
+                    placeholder="Price"
+                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    required
+                  />
                   <button
                     type="submit"
                     className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
@@ -200,12 +217,8 @@ const SpotTradingPage = () => {
                 </div>
               </form>
             </div>
-
-            {/* Sell Limit Order */}
             <div className="bg-gray-900 p-6 rounded">
-              <h3 className="text-xl font-bold text-red-400 mb-4 text-center">
-                Sell Limit
-              </h3>
+              <h3 className="text-xl font-bold text-red-400 mb-4 text-center">Sell Limit</h3>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -215,26 +228,20 @@ const SpotTradingPage = () => {
                 }}
               >
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-gray-300 mb-1">Amount</label>
-                    <input
-                      type="number"
-                      name="amount"
-                      placeholder="Enter amount"
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-300 mb-1">Price</label>
-                    <input
-                      type="number"
-                      name="price"
-                      placeholder="Enter price per unit"
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      required
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    name="amount"
+                    placeholder="Amount"
+                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    required
+                  />
+                  <input
+                    type="number"
+                    name="price"
+                    placeholder="Price"
+                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    required
+                  />
                   <button
                     type="submit"
                     className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded"
@@ -247,14 +254,10 @@ const SpotTradingPage = () => {
           </div>
         )}
 
-        {/* Market Order Form */}
         {orderType === 'market' && (
           <div className="grid grid-cols-2 gap-8">
-            {/* Buy Market Order */}
             <div className="bg-gray-900 p-6 rounded">
-              <h3 className="text-xl font-bold text-green-400 mb-4 text-center">
-                Buy Market
-              </h3>
+              <h3 className="text-xl font-bold text-green-400 mb-4 text-center">Buy Market</h3>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -263,16 +266,13 @@ const SpotTradingPage = () => {
                 }}
               >
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-gray-300 mb-1">Amount</label>
-                    <input
-                      type="number"
-                      name="amount"
-                      placeholder="Enter amount"
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      required
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    name="amount"
+                    placeholder="Amount"
+                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    required
+                  />
                   <button
                     type="submit"
                     className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
@@ -282,12 +282,8 @@ const SpotTradingPage = () => {
                 </div>
               </form>
             </div>
-
-            {/* Sell Market Order */}
             <div className="bg-gray-900 p-6 rounded">
-              <h3 className="text-xl font-bold text-red-400 mb-4 text-center">
-                Sell Market
-              </h3>
+              <h3 className="text-xl font-bold text-red-400 mb-4 text-center">Sell Market</h3>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -296,16 +292,13 @@ const SpotTradingPage = () => {
                 }}
               >
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-gray-300 mb-1">Amount</label>
-                    <input
-                      type="number"
-                      name="amount"
-                      placeholder="Enter amount"
-                      className="w-full p-2 rounded bg-gray-700 text-white"
-                      required
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    name="amount"
+                    placeholder="Amount"
+                    className="w-full p-2 rounded bg-gray-700 text-white"
+                    required
+                  />
                   <button
                     type="submit"
                     className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded"
@@ -316,6 +309,58 @@ const SpotTradingPage = () => {
               </form>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Open Positions */}
+      <div className="bg-gray-800 p-6 rounded shadow-lg mt-6">
+        <h2 className="text-xl font-bold text-neon-blue mb-4">Open Positions</h2>
+        {openPositions.length > 0 ? (
+          <ul className="space-y-4">
+            {openPositions.map((position) => (
+              <li
+                key={position.id}
+                className="flex justify-between bg-gray-900 p-4 rounded text-white"
+              >
+                <div>
+                  <p>
+                    <strong>{position.type}</strong> {position.amount} {position.symbol}
+                  </p>
+                  <p>Price: ${position.price}</p>
+                </div>
+                <button
+                  onClick={() => handleClosePosition(position.id)}
+                  className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded"
+                >
+                  Close
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-400">No open positions.</p>
+        )}
+      </div>
+
+      {/* Trade History */}
+      <div className="bg-gray-800 p-6 rounded shadow-lg mt-6">
+        <h2 className="text-xl font-bold text-neon-blue mb-4">Trade History</h2>
+        {tradeHistory.length > 0 ? (
+          <ul className="space-y-4">
+            {tradeHistory.map((trade, index) => (
+              <li key={index} className="bg-gray-900 p-4 rounded text-white">
+                <p>
+                  <strong>{trade.type}</strong> {trade.amount} {trade.symbol}
+                </p>
+                <p>Price: ${trade.price}</p>
+                <p>Status: {trade.status}</p>
+                <p>Time: {trade.timestamp}</p>
+                {trade.status === 'Closed' && <p>Close Time: {trade.closeTime}</p>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-400">No trade history available.</p>
         )}
       </div>
     </div>

@@ -11,16 +11,12 @@ const WalletSchema = new mongoose.Schema({
     required: true,
     enum: ['BTC', 'ETH', 'SOL'],
   },
-  address: {
+  depositAddress: {
     type: String,
     required: true,
     unique: true,
   },
-  privateKey: {
-    type: String,
-    required: true,
-  },
-  amount: {
+  balance: {
     type: Number,
     default: 0,
   },

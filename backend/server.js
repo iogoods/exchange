@@ -1,35 +1,38 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const bodyParser = require('body-parser');
+const orderRoutes = require('./routes/orders');
 const authRoutes = require('./routes/auth');
-const authMiddleware = require('./middleware/auth');
 
-const MONGO_URI = 'mongodb://202.61.243.84:27017/user';
+// Initialisieren der App
 const app = express();
 
 // Middleware
-app.use(express.json());
-app.use(cors()); // Aktiviert CORS für alle Domains
+app.use(cors());
+app.use(bodyParser.json());
 
 // MongoDB-Verbindung
+const MONGO_URI = 'mongodb://localhost:27017/crypto-exchange'; // Lokale MongoDB-URL
 mongoose
-  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected successfully'))
+  .connect(MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
-// Authentifizierungsrouten
-app.use('/api/auth', authRoutes);
+// Routen
+app.use('/api/auth', authRoutes); // Authentifizierung und Benutzerverwaltung
+app.use('/api/orders', orderRoutes); // Order-Management
 
-// Geschützte Route
-app.get('/api/protected', authMiddleware, (req, res) => {
-  res.send(`Welcome! Your user ID is ${req.user.id}`);
-});
-
-// Standardroute
+// Root Endpoint
 app.get('/', (req, res) => {
-  res.send('API is working and connected to MongoDB!');
+  res.send('Crypto Exchange Backend is running.');
 });
 
 // Server starten
 const PORT = 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
