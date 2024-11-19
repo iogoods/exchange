@@ -13,7 +13,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // MongoDB-Verbindung
-const MONGO_URI = 'mongodb://localhost:27017/user'; // Lokale MongoDB-URL
+const MONGO_URI = 'mongodb://202.61.243.84:27017/user'; // Lokale MongoDB-URL
 mongoose
   .connect(MONGO_URI, {
     useNewUrlParser: true,
