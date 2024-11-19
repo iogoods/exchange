@@ -1,57 +1,34 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-const Navbar = ({ isLoggedIn, setIsLoggedIn }) => {
+const Navbar = () => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    setIsLoggedIn(false);
     navigate('/login');
   };
 
+  const token = localStorage.getItem('token');
+
   return (
-    <nav className="bg-gray-800 p-4">
+    <nav className="bg-gray-900 p-4 text-white">
       <div className="container mx-auto flex justify-between items-center">
-        <div className="flex items-center space-x-4">
-          {/* Logo-Link zu Home */}
-          <Link to="/" className="text-white text-xl font-bold">
-            CryptoExchange
-          </Link>
-          <Link to="/spot" className="text-gray-300 hover:text-white">
-            Spot Trading
-          </Link>
-          <Link to="/futures" className="text-gray-300 hover:text-white">
-            Futures Trading
-          </Link>
-          {isLoggedIn && (
-            <Link to="/dashboard" className="text-gray-300 hover:text-white">
-              Dashboard
-            </Link>
-          )}
-        </div>
-        <div className="flex items-center space-x-4">
-          {isLoggedIn ? (
-            <button
-              onClick={handleLogout}
-              className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded"
-            >
-              Logout
-            </button>
+        <Link to="/" className="text-2xl font-bold text-neon-blue">
+          CryptoExchange
+        </Link>
+        <div className="flex space-x-4">
+          <Link to="/spot" className="hover:text-blue-400">Spot Trading</Link>
+          <Link to="/futures" className="hover:text-blue-400">Futures Trading</Link>
+          {token ? (
+            <>
+              <Link to="/dashboard" className="hover:text-blue-400">Dashboard</Link>
+              <button onClick={handleLogout} className="hover:text-red-400">Logout</button>
+            </>
           ) : (
             <>
-              <Link
-                to="/login"
-                className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded"
-              >
-                Login
-              </Link>
-              <Link
-                to="/register"
-                className="bg-green-500 hover:bg-green-600 text-white py-1 px-3 rounded"
-              >
-                Register
-              </Link>
+              <Link to="/login" className="hover:text-blue-400">Login</Link>
+              <Link to="/register" className="hover:text-blue-400">Register</Link>
             </>
           )}
         </div>

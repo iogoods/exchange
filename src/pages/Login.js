@@ -20,10 +20,10 @@ const Login = () => {
       });
 
       const data = await response.json();
+
       if (response.ok) {
-        localStorage.setItem('token', data.token);
-        alert('Login successful!');
-        navigate('/dashboard');
+        localStorage.setItem('token', data.token); // Speichere das Token
+        navigate('/dashboard'); // Weiterleitung zum Dashboard
       } else {
         setError(data.error || 'Login failed.');
       }
