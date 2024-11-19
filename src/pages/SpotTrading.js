@@ -6,10 +6,11 @@ import { coins } from '../data/coinData';
 const SpotTradingPage = () => {
   const { symbol } = useParams();
   const navigate = useNavigate();
+  const userId = 'demoUser'; // Beispielhafte User-ID, später dynamisch
   const [selectedSymbol, setSelectedSymbol] = useState(symbol || 'BTCUSDT');
   const [searchTerm, setSearchTerm] = useState('');
   const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
-  const [orderType, setOrderType] = useState('limit'); // Default: Limit Order
+  const [orderType, setOrderType] = useState('limit');
   const [openPositions, setOpenPositions] = useState([]);
   const [tradeHistory, setTradeHistory] = useState([]);
 
@@ -34,6 +35,20 @@ const SpotTradingPage = () => {
     return () => ws.close();
   }, [selectedSymbol]);
 
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/orders/${userId}`);
+        const orders = await response.json();
+        setOpenPositions(orders.filter((order) => order.status === 'Open'));
+        setTradeHistory(orders);
+      } catch (error) {
+        console.error('Error loading orders:', error);
+      }
+    };
+    fetchOrders();
+  }, []);
+
   const filteredCoins = coins.filter((coin) =>
     coin.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -42,46 +57,75 @@ const SpotTradingPage = () => {
     navigate(`/spot/${newSymbol}`);
   };
 
-  const handleTrade = (type, amount, price) => {
+  const handleTrade = async (type, amount, price) => {
     const isMarketOrder = orderType === 'market';
     const tradePrice = isMarketOrder ? 'Market Price' : price;
 
     const newTrade = {
       id: Math.random().toString(36).substr(2, 9),
+      userId,
       type: type.toUpperCase(),
       amount,
       price: tradePrice,
       symbol: selectedSymbol,
       orderType,
-      timestamp: new Date().toLocaleString(),
+      status: 'Open',
+      timestamp: new Date().toISOString(),
     };
 
-    // Position eröffnen
-    setOpenPositions([...openPositions, newTrade]);
+    try {
+      const response = await fetch('http://localhost:5000/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTrade),
+      });
 
-    // Historie aktualisieren
-    setTradeHistory([...tradeHistory, { ...newTrade, status: 'Executed' }]);
-
-    alert(
-      `${type.toUpperCase()} ${amount} ${selectedSymbol} at ${
-        isMarketOrder ? 'Market Price' : `$${price}`
-      }`
-    );
+      if (response.ok) {
+        const savedOrder = await response.json();
+        setOpenPositions([...openPositions, savedOrder]);
+        setTradeHistory([...tradeHistory, savedOrder]);
+        alert(
+          `${type.toUpperCase()} ${amount} ${selectedSymbol} at ${
+            isMarketOrder ? 'Market Price' : `$${price}`
+          }`
+        );
+      } else {
+        alert('Failed to place trade.');
+      }
+    } catch (error) {
+      console.error('Error placing trade:', error);
+      alert('Failed to place trade.');
+    }
   };
 
-  const handleClosePosition = (id) => {
+  const handleClosePosition = async (id) => {
     const positionToClose = openPositions.find((position) => position.id === id);
-    setOpenPositions(openPositions.filter((position) => position.id !== id));
-    setTradeHistory([
-      ...tradeHistory,
-      { ...positionToClose, status: 'Closed', closeTime: new Date().toLocaleString() },
-    ]);
-    alert(`Position ${id} closed.`);
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/orders/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Closed', closeTime: new Date().toISOString() }),
+      });
+
+      if (response.ok) {
+        setOpenPositions(openPositions.filter((position) => position.id !== id));
+        setTradeHistory([
+          ...tradeHistory,
+          { ...positionToClose, status: 'Closed', closeTime: new Date().toISOString() },
+        ]);
+        alert(`Position ${id} closed.`);
+      } else {
+        alert('Failed to close position.');
+      }
+    } catch (error) {
+      console.error('Error closing position:', error);
+      alert('Failed to close position.');
+    }
   };
 
   return (
     <div className="container mx-auto px-6 py-8">
-      {/* Title */}
       <h1 className="text-5xl font-bold text-neon-blue text-center mb-8">
         Spot Trading ({selectedSymbol})
       </h1>
@@ -153,9 +197,7 @@ const SpotTradingPage = () => {
 
       {/* Kaufen-/Verkaufen-Feld */}
       <div className="bg-gray-800 p-6 rounded shadow-lg mt-6">
-        <h2 className="text-2xl font-bold text-neon-blue mb-4 text-center">
-          Place a Trade
-        </h2>
+        <h2 className="text-2xl font-bold text-neon-blue mb-4 text-center">Place a Trade</h2>
 
         {/* Order Type Tabs */}
         <div className="flex justify-center space-x-4 mb-6">
@@ -181,6 +223,7 @@ const SpotTradingPage = () => {
           </button>
         </div>
 
+        {/* Limit Order Form */}
         {orderType === 'limit' && (
           <div className="grid grid-cols-2 gap-8">
             <div className="bg-gray-900 p-6 rounded">
@@ -254,6 +297,7 @@ const SpotTradingPage = () => {
           </div>
         )}
 
+        {/* Market Order Form */}
         {orderType === 'market' && (
           <div className="grid grid-cols-2 gap-8">
             <div className="bg-gray-900 p-6 rounded">
