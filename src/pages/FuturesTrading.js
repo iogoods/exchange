@@ -3,29 +3,36 @@ import { useParams, useNavigate } from 'react-router-dom';
 import TradingChart from '../components/TradingChart';
 import { coins } from '../data/coinData';
 
-const SpotTradingPage = () => {
-  const { symbol } = useParams(); // Dynamisches Symbol aus URL
+const FuturesTradingPage = ({ user, updateUser }) => {
+  const { symbol } = useParams();
   const navigate = useNavigate();
-  const [selectedSymbol, setSelectedSymbol] = useState(symbol || 'BTCUSDT'); // Standard-Symbol: BTC/USDT
+  const [selectedSymbol, setSelectedSymbol] = useState(symbol || 'BTCUSDT');
   const [searchTerm, setSearchTerm] = useState('');
   const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
-  const [orderType, setOrderType] = useState('limit'); // "limit" oder "market"
+  const [orderType, setOrderType] = useState('limit');
+  const [leverage, setLeverage] = useState(10);
   const [openPositions, setOpenPositions] = useState([]);
   const [tradeHistory, setTradeHistory] = useState([]);
+  const [currentPrice, setCurrentPrice] = useState(0);
 
   useEffect(() => {
-    // Aktualisiere das ausgewählte Symbol basierend auf der URL
-    if (symbol) {
-      setSelectedSymbol(symbol.toUpperCase());
-    }
+    if (symbol) setSelectedSymbol(symbol.toUpperCase());
   }, [symbol]);
 
   useEffect(() => {
-    // WebSocket für Order Book
-    const ws = new WebSocket(
+    const priceWs = new WebSocket(
+      `wss://stream.binance.com:9443/ws/${selectedSymbol.toLowerCase()}@ticker`
+    );
+    const orderBookWs = new WebSocket(
       `wss://stream.binance.com:9443/ws/${selectedSymbol.toLowerCase()}@depth10`
     );
-    ws.onmessage = (event) => {
+
+    priceWs.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      setCurrentPrice(parseFloat(message.c));
+    };
+
+    orderBookWs.onmessage = (event) => {
       const message = JSON.parse(event.data);
       setOrderBook({
         bids: message.bids || [],
@@ -33,51 +40,109 @@ const SpotTradingPage = () => {
       });
     };
 
-    return () => ws.close();
+    return () => {
+      priceWs.close();
+      orderBookWs.close();
+    };
   }, [selectedSymbol]);
+
+  // Liquidation Checker
+  useEffect(() => {
+    const interval = setInterval(() => {
+      openPositions.forEach((position) => {
+        const isLong = position.type === 'buy';
+        if (
+          (isLong && currentPrice <= position.liquidationPrice) ||
+          (!isLong && currentPrice >= position.liquidationPrice)
+        ) {
+          handleClosePosition(position.id, true);
+          alert(`Position ${position.id} has been liquidated!`);
+        }
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [openPositions, currentPrice]);
 
   const filteredCoins = coins.filter((coin) =>
     coin.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleCoinSelection = (newSymbol) => {
-    navigate(`/spot/${newSymbol}`);
+    navigate(`/futures/${newSymbol}`);
   };
 
-  const handleTrade = (type, amount, price = 'Market Price') => {
-    const newTrade = {
+  const handleTrade = (type, amount, price, stopLoss, takeProfit) => {
+    if (!user || !user.balance) {
+      alert('You must be logged in and have sufficient balance to trade.');
+      return;
+    }
+
+    const tradePrice =
+      orderType === 'market'
+        ? parseFloat(orderBook.bids[0]?.[0] || currentPrice)
+        : parseFloat(price);
+
+    const positionSize = parseFloat(amount) * tradePrice;
+    const requiredMargin = positionSize / leverage;
+
+    if (user.balance < requiredMargin) {
+      alert('Insufficient balance to open this position.');
+      return;
+    }
+
+    const liquidationPrice =
+      type === 'buy'
+        ? tradePrice - tradePrice / leverage
+        : tradePrice + tradePrice / leverage;
+
+    const newPosition = {
       id: Math.random().toString(36).substr(2, 9),
-      type: type.toUpperCase(),
-      amount,
-      price,
       symbol: selectedSymbol,
+      type: type.toUpperCase(),
+      amount: parseFloat(amount),
+      entryPrice: tradePrice,
+      leverage,
+      liquidationPrice: liquidationPrice.toFixed(2),
+      stopLoss: stopLoss ? parseFloat(stopLoss) : 'N/A',
+      takeProfit: takeProfit ? parseFloat(takeProfit) : 'N/A',
+      status: 'Open',
       timestamp: new Date().toLocaleString(),
     };
 
-    // Position eröffnen
-    setOpenPositions([...openPositions, newTrade]);
+    // Deduct margin from user balance
+    updateUser({ ...user, balance: user.balance - requiredMargin });
 
-    // Historie aktualisieren
-    setTradeHistory([...tradeHistory, { ...newTrade, status: 'Executed' }]);
+    setOpenPositions([...openPositions, newPosition]);
+    setTradeHistory([...tradeHistory, { ...newPosition, status: 'Executed' }]);
 
-    alert(`${type.toUpperCase()} ${amount} ${selectedSymbol} at ${price}`);
+    alert(`${type.toUpperCase()} ${amount} ${selectedSymbol} at ${tradePrice} (Leverage x${leverage})`);
   };
 
-  const handleClosePosition = (id) => {
+  const handleClosePosition = (id, isLiquidation = false) => {
     const positionToClose = openPositions.find((position) => position.id === id);
+
+    if (!positionToClose) return;
+
+    const pnl =
+      (currentPrice - positionToClose.entryPrice) *
+      positionToClose.amount *
+      (positionToClose.type === 'buy' ? 1 : -1);
+
+    const refundMargin = isLiquidation ? 0 : positionToClose.amount * positionToClose.entryPrice / leverage;
+    updateUser({ ...user, balance: user.balance + refundMargin + pnl });
+
     setOpenPositions(openPositions.filter((position) => position.id !== id));
     setTradeHistory([
       ...tradeHistory,
-      { ...positionToClose, status: 'Closed', closeTime: new Date().toLocaleString() },
+      { ...positionToClose, status: isLiquidation ? 'Liquidated' : 'Closed', closeTime: new Date().toLocaleString() },
     ]);
-    alert(`Position ${id} closed.`);
   };
 
   return (
     <div className="container mx-auto px-6 py-8">
-      {/* Title */}
       <h1 className="text-5xl font-bold text-neon-blue text-center mb-8">
-        Spot Trading ({selectedSymbol})
+        Futures Trading ({selectedSymbol})
       </h1>
 
       <div className="grid grid-cols-4 gap-6">
@@ -118,10 +183,7 @@ const SpotTradingPage = () => {
         {/* Order Book */}
         <div className="bg-gray-800 p-6 rounded shadow-lg">
           <h2 className="text-xl font-bold text-white">Order Book</h2>
-
-          {/* Order Book Spalten */}
           <div className="grid grid-cols-1">
-            {/* Verkauf-Orders (Asks) */}
             <div className="border-b border-gray-600 pb-2 mb-2">
               <h3 className="text-red-400 font-bold text-center">Asks (Sell Orders)</h3>
               <ul className="mt-2 max-h-[200px] overflow-y-auto flex flex-col-reverse">
@@ -133,8 +195,6 @@ const SpotTradingPage = () => {
                 ))}
               </ul>
             </div>
-
-            {/* Kauf-Orders (Bids) */}
             <div>
               <h3 className="text-green-400 font-bold text-center">Bids (Buy Orders)</h3>
               <ul className="mt-2 max-h-[200px] overflow-y-auto">
@@ -150,61 +210,91 @@ const SpotTradingPage = () => {
         </div>
       </div>
 
-      {/* Kaufen-/Verkaufen-Feld */}
+      {/* Place a Trade */}
       <div className="bg-gray-800 p-6 rounded shadow-lg mt-6">
-        <h2 className="text-2xl font-bold text-neon-blue mb-4 text-center">
-          Place a Trade
-        </h2>
-        <div className="grid grid-cols-2 gap-8">
-          <div className="bg-gray-900 p-6 rounded">
-            <h3 className="text-xl font-bold text-green-400 mb-4 text-center">Buy</h3>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const amount = e.target.amount.value;
-                handleTrade('buy', amount);
-              }}
-            >
+        <h2 className="text-2xl font-bold text-neon-blue mb-4 text-center">Place a Trade</h2>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const amount = e.target.amount.value;
+            const price = orderType === 'market' ? null : e.target.price?.value;
+            const stopLoss = e.target.stopLoss?.value || null;
+            const takeProfit = e.target.takeProfit?.value || null;
+            handleTrade('buy', amount, price, stopLoss, takeProfit);
+          }}
+        >
+          <label className="block text-white mb-2 text-lg">Leverage: x{leverage}</label>
+          <input
+            type="range"
+            min="1"
+            max="125"
+            value={leverage}
+            onChange={(e) => setLeverage(e.target.value)}
+            className="w-full mb-6"
+          />
+          <div className="grid grid-cols-2 gap-8">
+            <div>
+              <label className="block text-white mb-2">Order Type:</label>
+              <select
+                className="w-full p-2 rounded bg-gray-700 text-white mb-4"
+                value={orderType}
+                onChange={(e) => setOrderType(e.target.value)}
+              >
+                <option value="limit">Limit Order</option>
+                <option value="market">Market Order</option>
+              </select>
               <input
                 type="number"
                 name="amount"
-                placeholder="Enter amount"
+                placeholder="Amount"
                 className="w-full p-2 rounded bg-gray-700 text-white mb-4"
                 required
               />
+              {orderType === 'limit' && (
+                <input
+                  type="number"
+                  name="price"
+                  placeholder="Price"
+                  className="w-full p-2 rounded bg-gray-700 text-white mb-4"
+                />
+              )}
+              <input
+                type="number"
+                name="stopLoss"
+                placeholder="Stop Loss (optional)"
+                className="w-full p-2 rounded bg-gray-700 text-white mb-4"
+              />
+              <input
+                type="number"
+                name="takeProfit"
+                placeholder="Take Profit (optional)"
+                className="w-full p-2 rounded bg-gray-700 text-white mb-4"
+              />
+            </div>
+            <div className="flex flex-col justify-center space-y-4">
               <button
                 type="submit"
-                className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
+                className="bg-green-500 hover:bg-green-600 text-white py-4 rounded-lg text-lg"
               >
                 Buy
               </button>
-            </form>
-          </div>
-          <div className="bg-gray-900 p-6 rounded">
-            <h3 className="text-xl font-bold text-red-400 mb-4 text-center">Sell</h3>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const amount = e.target.amount.value;
-                handleTrade('sell', amount);
-              }}
-            >
-              <input
-                type="number"
-                name="amount"
-                placeholder="Enter amount"
-                className="w-full p-2 rounded bg-gray-700 text-white mb-4"
-                required
-              />
               <button
-                type="submit"
-                className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const amount = e.target.form.amount.value;
+                  const price = orderType === 'market' ? null : e.target.form.price?.value;
+                  const stopLoss = e.target.form.stopLoss?.value || null;
+                  const takeProfit = e.target.form.takeProfit?.value || null;
+                  handleTrade('sell', amount, price, stopLoss, takeProfit);
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white py-4 rounded-lg text-lg"
               >
                 Sell
               </button>
-            </form>
+            </div>
           </div>
-        </div>
+        </form>
       </div>
 
       {/* Open Positions */}
@@ -221,7 +311,9 @@ const SpotTradingPage = () => {
                   <p>
                     <strong>{position.type}</strong> {position.amount} {position.symbol}
                   </p>
-                  <p>Price: ${position.price}</p>
+                  <p>Entry Price: ${position.entryPrice.toFixed(2)}</p>
+                  <p>Leverage: x{position.leverage}</p>
+                  <p>Liquidation Price: ${position.liquidationPrice}</p>
                 </div>
                 <button
                   onClick={() => handleClosePosition(position.id)}
@@ -247,7 +339,7 @@ const SpotTradingPage = () => {
                 <p>
                   <strong>{trade.type}</strong> {trade.amount} {trade.symbol}
                 </p>
-                <p>Price: ${trade.price}</p>
+                <p>Price: ${trade.entryPrice}</p>
                 <p>Status: {trade.status}</p>
                 <p>Time: {trade.timestamp}</p>
                 {trade.status === 'Closed' && <p>Close Time: {trade.closeTime}</p>}
@@ -262,4 +354,4 @@ const SpotTradingPage = () => {
   );
 };
 
-export default SpotTradingPage;
+export default FuturesTradingPage;

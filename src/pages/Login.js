@@ -1,14 +1,24 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const LoginPage = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+const Login = () => {
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+  });
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleLogin = async (e) => {
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
 
     try {
       const response = await fetch('http://202.61.243.84:5000/api/auth/login', {
@@ -16,58 +26,71 @@ const LoginPage = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(formData),
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Login failed');
+        throw new Error('Invalid email or password.');
       }
 
       const data = await response.json();
-      localStorage.setItem('token', data.token); // Token speichern
-      localStorage.setItem('user', JSON.stringify(data.user)); // Benutzer speichern
-      navigate('/dashboard'); // Weiterleitung zum Dashboard
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      navigate('/dashboard');
     } catch (err) {
-      console.error('Login error:', err);
-      setError(err.message);
+      setError(err.message || 'An error occurred.');
     }
   };
 
   return (
-    <div className="container mx-auto max-w-md px-4 py-8">
-      <h1 className="text-3xl font-bold text-center mb-6">Login</h1>
-      {error && <div className="text-red-500 mb-4">{error}</div>}
-      <form onSubmit={handleLogin} className="space-y-4">
-        <div>
-          <label className="block text-gray-700 mb-2">Username</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full p-2 border rounded"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-gray-700 mb-2">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-2 border rounded"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
-        >
-          Login
-        </button>
-      </form>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-black">
+      <div className="bg-gray-800 p-8 rounded shadow-lg max-w-md w-full">
+        <h2 className="text-3xl font-bold text-white text-center mb-6">Welcome Back</h2>
+        {error && <div className="bg-red-500 text-white p-3 rounded mb-4">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-gray-400 mb-2">Email</label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              className="w-full p-3 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter your email"
+            />
+          </div>
+          <div className="mb-6">
+            <label className="block text-gray-400 mb-2">Password</label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              className="w-full p-3 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter your password"
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded font-bold text-lg"
+          >
+            Login
+          </button>
+          <p className="text-gray-400 text-center mt-4">
+            Don't have an account?{' '}
+            <span
+              onClick={() => navigate('/register')}
+              className="text-blue-500 cursor-pointer hover:underline"
+            >
+              Register here
+            </span>
+          </p>
+        </form>
+      </div>
     </div>
   );
 };
 
-export default LoginPage;
+export default Login;

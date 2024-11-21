@@ -3,21 +3,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 import TradingChart from '../components/TradingChart';
 import { coins } from '../data/coinData';
 
-const SpotTradingPage = () => {
+const SpotTradingPage = ({ isLoggedIn }) => {
   const { symbol } = useParams();
   const navigate = useNavigate();
-  const userId = 'demoUser'; // Beispielhafte User-ID, später dynamisch
   const [selectedSymbol, setSelectedSymbol] = useState(symbol || 'BTCUSDT');
   const [searchTerm, setSearchTerm] = useState('');
   const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
   const [orderType, setOrderType] = useState('limit');
   const [openPositions, setOpenPositions] = useState([]);
   const [tradeHistory, setTradeHistory] = useState([]);
+  const [balances, setBalances] = useState({ BTC: 0, USDT: 0 });
+
+  const user = 'demoUser';
 
   useEffect(() => {
-    if (symbol) {
-      setSelectedSymbol(symbol.toUpperCase());
-    }
+    if (symbol) setSelectedSymbol(symbol.toUpperCase());
   }, [symbol]);
 
   useEffect(() => {
@@ -31,23 +31,112 @@ const SpotTradingPage = () => {
         asks: message.asks || [],
       });
     };
-
     return () => ws.close();
   }, [selectedSymbol]);
 
   useEffect(() => {
-    const fetchOrders = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/orders/${userId}`);
-        const orders = await response.json();
-        setOpenPositions(orders.filter((order) => order.status === 'Open'));
-        setTradeHistory(orders);
+        const ordersResponse = await fetch(
+          `http://202.61.243.84:5000/api/orders/${selectedSymbol}`
+        );
+        const ordersData = await ordersResponse.json();
+        setOpenPositions(ordersData.openPositions || []);
+        setTradeHistory(ordersData.tradeHistory || []);
+
+        const balanceResponse = await fetch(
+          `http://202.61.243.84:5000/api/balance/${user}`
+        );
+        const balanceData = await balanceResponse.json();
+        setBalances(balanceData.balances || {});
       } catch (error) {
-        console.error('Error loading orders:', error);
+        console.error('Fehler beim Abrufen der Daten:', error);
       }
     };
-    fetchOrders();
-  }, []);
+    fetchData();
+  }, [selectedSymbol]);
+
+  const handleTrade = async (type, amount, price) => {
+    if (!isLoggedIn) {
+      alert('Sie müssen eingeloggt sein, um handeln zu können.');
+      return;
+    }
+
+    const tradePrice =
+      orderType === 'market' ? parseFloat(orderBook.bids[0]?.[0] || '0') : parseFloat(price);
+
+    if (type === 'buy' && balances.USDT < tradePrice * amount) {
+      alert('Nicht genügend USDT.');
+      return;
+    }
+    if (type === 'sell' && balances.BTC < amount) {
+      alert('Nicht genügend BTC.');
+      return;
+    }
+
+    const newTrade = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: type.toUpperCase(),
+      amount,
+      price: tradePrice,
+      symbol: selectedSymbol,
+      timestamp: new Date().toLocaleString(),
+    };
+
+    try {
+      const response = await fetch('http://202.61.243.84:5000/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTrade),
+      });
+
+      if (response.ok) {
+        if (type === 'buy') {
+          setBalances((prev) => ({
+            ...prev,
+            BTC: prev.BTC + amount,
+            USDT: prev.USDT - tradePrice * amount,
+          }));
+        } else {
+          setBalances((prev) => ({
+            ...prev,
+            BTC: prev.BTC - amount,
+            USDT: prev.USDT + tradePrice * amount,
+          }));
+        }
+
+        setOpenPositions([...openPositions, newTrade]);
+        setTradeHistory([...tradeHistory, { ...newTrade, status: 'Executed' }]);
+        alert('Trade erfolgreich!');
+      } else {
+        alert('Fehler beim Trade.');
+      }
+    } catch (error) {
+      console.error('Fehler beim Trade:', error);
+    }
+  };
+
+  const handleClosePosition = async (id) => {
+    const positionToClose = openPositions.find((position) => position.id === id);
+    try {
+      const response = await fetch(
+        `http://202.61.243.84:5000/api/orders/close/${id}`,
+        { method: 'POST' }
+      );
+      if (response.ok) {
+        setOpenPositions(openPositions.filter((position) => position.id !== id));
+        setTradeHistory([
+          ...tradeHistory,
+          { ...positionToClose, status: 'Closed', closeTime: new Date().toLocaleString() },
+        ]);
+        alert('Position geschlossen.');
+      } else {
+        console.error('Fehler beim Schließen der Position');
+      }
+    } catch (error) {
+      console.error('Fehler beim Schließen der Position:', error);
+    }
+  };
 
   const filteredCoins = coins.filter((coin) =>
     coin.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -55,73 +144,6 @@ const SpotTradingPage = () => {
 
   const handleCoinSelection = (newSymbol) => {
     navigate(`/spot/${newSymbol}`);
-  };
-
-  const handleTrade = async (type, amount, price) => {
-    const isMarketOrder = orderType === 'market';
-    const tradePrice = isMarketOrder ? 'Market Price' : price;
-
-    const newTrade = {
-      id: Math.random().toString(36).substr(2, 9),
-      userId,
-      type: type.toUpperCase(),
-      amount,
-      price: tradePrice,
-      symbol: selectedSymbol,
-      orderType,
-      status: 'Open',
-      timestamp: new Date().toISOString(),
-    };
-
-    try {
-      const response = await fetch('http://localhost:5000/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTrade),
-      });
-
-      if (response.ok) {
-        const savedOrder = await response.json();
-        setOpenPositions([...openPositions, savedOrder]);
-        setTradeHistory([...tradeHistory, savedOrder]);
-        alert(
-          `${type.toUpperCase()} ${amount} ${selectedSymbol} at ${
-            isMarketOrder ? 'Market Price' : `$${price}`
-          }`
-        );
-      } else {
-        alert('Failed to place trade.');
-      }
-    } catch (error) {
-      console.error('Error placing trade:', error);
-      alert('Failed to place trade.');
-    }
-  };
-
-  const handleClosePosition = async (id) => {
-    const positionToClose = openPositions.find((position) => position.id === id);
-
-    try {
-      const response = await fetch(`http://localhost:5000/api/orders/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'Closed', closeTime: new Date().toISOString() }),
-      });
-
-      if (response.ok) {
-        setOpenPositions(openPositions.filter((position) => position.id !== id));
-        setTradeHistory([
-          ...tradeHistory,
-          { ...positionToClose, status: 'Closed', closeTime: new Date().toISOString() },
-        ]);
-        alert(`Position ${id} closed.`);
-      } else {
-        alert('Failed to close position.');
-      }
-    } catch (error) {
-      console.error('Error closing position:', error);
-      alert('Failed to close position.');
-    }
   };
 
   return (
@@ -197,9 +219,9 @@ const SpotTradingPage = () => {
 
       {/* Kaufen-/Verkaufen-Feld */}
       <div className="bg-gray-800 p-6 rounded shadow-lg mt-6">
-        <h2 className="text-2xl font-bold text-neon-blue mb-4 text-center">Place a Trade</h2>
-
-        {/* Order Type Tabs */}
+        <h2 className="text-2xl font-bold text-neon-blue mb-4 text-center">
+          Place a Trade
+        </h2>
         <div className="flex justify-center space-x-4 mb-6">
           <button
             className={`px-6 py-2 text-lg font-bold rounded-lg ${
@@ -222,138 +244,76 @@ const SpotTradingPage = () => {
             Market Order
           </button>
         </div>
-
-        {/* Limit Order Form */}
-        {orderType === 'limit' && (
-          <div className="grid grid-cols-2 gap-8">
-            <div className="bg-gray-900 p-6 rounded">
-              <h3 className="text-xl font-bold text-green-400 mb-4 text-center">Buy Limit</h3>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const amount = e.target.amount.value;
-                  const price = e.target.price.value;
-                  handleTrade('buy', amount, price);
-                }}
+        <div className="grid grid-cols-2 gap-8">
+          <div className="bg-gray-900 p-6 rounded">
+            <h3 className="text-xl font-bold text-green-400 mb-4 text-center">Buy</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const amount = e.target.amount.value;
+                const price = orderType === 'limit' ? e.target.price.value : 'Market Price';
+                handleTrade('buy', amount, price);
+              }}
+            >
+              <input
+                type="number"
+                name="amount"
+                placeholder="Amount"
+                className="w-full p-2 rounded bg-gray-700 text-white mb-4"
+                required
+              />
+              {orderType === 'limit' && (
+                <input
+                  type="number"
+                  name="price"
+                  placeholder="Price"
+                  className="w-full p-2 rounded bg-gray-700 text-white mb-4"
+                  required
+                />
+              )}
+              <button
+                type="submit"
+                className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
               >
-                <div className="space-y-4">
-                  <input
-                    type="number"
-                    name="amount"
-                    placeholder="Amount"
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    required
-                  />
-                  <input
-                    type="number"
-                    name="price"
-                    placeholder="Price"
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
-                  >
-                    Place Buy Order
-                  </button>
-                </div>
-              </form>
-            </div>
-            <div className="bg-gray-900 p-6 rounded">
-              <h3 className="text-xl font-bold text-red-400 mb-4 text-center">Sell Limit</h3>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const amount = e.target.amount.value;
-                  const price = e.target.price.value;
-                  handleTrade('sell', amount, price);
-                }}
-              >
-                <div className="space-y-4">
-                  <input
-                    type="number"
-                    name="amount"
-                    placeholder="Amount"
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    required
-                  />
-                  <input
-                    type="number"
-                    name="price"
-                    placeholder="Price"
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded"
-                  >
-                    Place Sell Order
-                  </button>
-                </div>
-              </form>
-            </div>
+                Buy
+              </button>
+            </form>
           </div>
-        )}
-
-        {/* Market Order Form */}
-        {orderType === 'market' && (
-          <div className="grid grid-cols-2 gap-8">
-            <div className="bg-gray-900 p-6 rounded">
-              <h3 className="text-xl font-bold text-green-400 mb-4 text-center">Buy Market</h3>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const amount = e.target.amount.value;
-                  handleTrade('buy', amount);
-                }}
+          <div className="bg-gray-900 p-6 rounded">
+            <h3 className="text-xl font-bold text-red-400 mb-4 text-center">Sell</h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const amount = e.target.amount.value;
+                const price = orderType === 'limit' ? e.target.price.value : 'Market Price';
+                handleTrade('sell', amount, price);
+              }}
+            >
+              <input
+                type="number"
+                name="amount"
+                placeholder="Amount"
+                className="w-full p-2 rounded bg-gray-700 text-white mb-4"
+                required
+              />
+              {orderType === 'limit' && (
+                <input
+                  type="number"
+                  name="price"
+                  placeholder="Price"
+                  className="w-full p-2 rounded bg-gray-700 text-white mb-4"
+                  required
+                />
+              )}
+              <button
+                type="submit"
+                className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded"
               >
-                <div className="space-y-4">
-                  <input
-                    type="number"
-                    name="amount"
-                    placeholder="Amount"
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
-                  >
-                    Place Buy Order
-                  </button>
-                </div>
-              </form>
-            </div>
-            <div className="bg-gray-900 p-6 rounded">
-              <h3 className="text-xl font-bold text-red-400 mb-4 text-center">Sell Market</h3>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const amount = e.target.amount.value;
-                  handleTrade('sell', amount);
-                }}
-              >
-                <div className="space-y-4">
-                  <input
-                    type="number"
-                    name="amount"
-                    placeholder="Amount"
-                    className="w-full p-2 rounded bg-gray-700 text-white"
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded"
-                  >
-                    Place Sell Order
-                  </button>
-                </div>
-              </form>
-            </div>
+                Sell
+              </button>
+            </form>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Open Positions */}
