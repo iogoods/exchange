@@ -30,7 +30,6 @@ app.use(cors({
   optionsSuccessStatus: 204 // Status für erfolgreiche Preflight-Antworten
 }));
 
-s
 // MongoDB Connection
 mongoose
   .connect('mongodb://127.0.0.1:27017/exchange', { useNewUrlParser: true, useUnifiedTopology: true })
