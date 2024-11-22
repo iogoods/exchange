@@ -1,6 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors');
+// const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const walletRoutes = require('./routes/wallets');
@@ -21,13 +21,13 @@ app.use('/api/transactions', transactionRoutes);
 app.use(express.json());
 
 
-app.use(
-  cors({
-    origin: '*', // Für die Entwicklung
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
+//app.use(
+//  cors({
+//    origin: '*', // Für die Entwicklung
+//    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//    allowedHeaders: ['Content-Type', 'Authorization'],
+//  })
+//  );
 
 // MongoDB Connection
 mongoose
