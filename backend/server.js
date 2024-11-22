@@ -3,10 +3,19 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const walletRoutes = require('./routes/wallets');
+const transactionRoutes = require('./routes/transactions');
+
 
 const app = express();
 const PORT = 5000;
 const JWT_SECRET = 'secret_key_for_jwt'; // Ersetze durch einen sicheren Schlüssel
+
+
+app.use(express.json());
+app.use('/api/wallets', walletRoutes);
+app.use('/api/transactions', transactionRoutes);
+
 
 // Middleware
 app.use(express.json());
