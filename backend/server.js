@@ -21,14 +21,16 @@ app.use('/api/transactions', transactionRoutes);
 app.use(express.json());
 
 
-app.use(
-  cors({
-    origin: '*', // Erlaubt nur Anfragen von localhost:3000
-    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Erlaubte HTTP-Methoden
-    allowedHeaders: ['Content-Type', 'Authorization'], // Erlaubte Header
-  })
-);
+// CORS-Konfiguration
+app.use(cors({
+  origin: '*', // Erlaubt alle Ursprünge
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Erlaubte Methoden
+  allowedHeaders: ['Content-Type', 'Authorization'], // Erlaubte Header
+  preflightContinue: false, // Beende Preflight-Anfragen
+  optionsSuccessStatus: 204 // Status für erfolgreiche Preflight-Antworten
+}));
 
+s
 // MongoDB Connection
 mongoose
   .connect('mongodb://127.0.0.1:27017/exchange', { useNewUrlParser: true, useUnifiedTopology: true })
