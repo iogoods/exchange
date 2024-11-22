@@ -19,7 +19,15 @@ app.use('/api/transactions', transactionRoutes);
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+
+
+app.use(
+  cors({
+    origin: '*', // Für die Entwicklung
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 
 // MongoDB Connection
 mongoose
