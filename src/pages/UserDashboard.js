@@ -10,7 +10,7 @@ const UserDashboard = () => {
   // Wallets abrufen
   const fetchWallets = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/wallets', {
+      const response = await fetch('http://202.61.243.84:5000/api/wallets', {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       const data = await response.json();
@@ -30,7 +30,7 @@ const UserDashboard = () => {
   // Transaktionen abrufen
   const fetchTransactions = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/transactions', {
+      const response = await fetch('http://202.61.243.84:5000/api/transactions', {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       const data = await response.json();
@@ -53,7 +53,7 @@ const UserDashboard = () => {
     const { coin, amount, address } = withdrawal;
 
     try {
-      const response = await fetch('http://localhost:5000/api/wallets/withdraw', {
+      const response = await fetch('http://202.61.243.84:5000/api/wallets/withdraw', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

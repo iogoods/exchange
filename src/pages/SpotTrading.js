@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import TradingChart from '../components/TradingChart';
 import { coins } from '../data/coinData';
 
-const SpotTradingPage = ({ isLoggedIn }) => {
+const SpotTradingPage = ({ isLoggedIn, username }) => {
   const { symbol } = useParams();
   const navigate = useNavigate();
   const [selectedSymbol, setSelectedSymbol] = useState(symbol || 'BTCUSDT');
@@ -13,13 +13,13 @@ const SpotTradingPage = ({ isLoggedIn }) => {
   const [openPositions, setOpenPositions] = useState([]);
   const [tradeHistory, setTradeHistory] = useState([]);
   const [balances, setBalances] = useState({ BTC: 0, USDT: 0 });
-
-  const user = 'demoUser';
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     if (symbol) setSelectedSymbol(symbol.toUpperCase());
   }, [symbol]);
 
+  // WebSocket für Order Book
   useEffect(() => {
     const ws = new WebSocket(
       `wss://stream.binance.com:9443/ws/${selectedSymbol.toLowerCase()}@depth10`
@@ -34,31 +34,64 @@ const SpotTradingPage = ({ isLoggedIn }) => {
     return () => ws.close();
   }, [selectedSymbol]);
 
+  // Backend-Daten synchronisieren
   useEffect(() => {
     const fetchData = async () => {
+      if (!isLoggedIn || !username) return;
       try {
-        const ordersResponse = await fetch(
-          `http://202.61.243.84:5000/api/orders/${selectedSymbol}`
-        );
-        const ordersData = await ordersResponse.json();
-        setOpenPositions(ordersData.openPositions || []);
-        setTradeHistory(ordersData.tradeHistory || []);
+        const [ordersResponse, balanceResponse] = await Promise.all([
+          fetch(`http://202.61.243.84:5000/api/orders/${selectedSymbol}`),
+          fetch(`http://202.61.243.84:5000/api/balance/${username}`), // Verwende den angemeldeten Benutzer
+        ]);
 
-        const balanceResponse = await fetch(
-          `http://202.61.243.84:5000/api/balance/${user}`
-        );
-        const balanceData = await balanceResponse.json();
-        setBalances(balanceData.balances || {});
+        if (ordersResponse.ok) {
+          const ordersData = await ordersResponse.json();
+          setOpenPositions(ordersData.openPositions || []);
+          setTradeHistory(ordersData.tradeHistory || []);
+        }
+
+        if (balanceResponse.ok) {
+          const balanceData = await balanceResponse.json();
+          setBalances(balanceData.balances || { BTC: 0, USDT: 0 });
+        } else {
+          console.error('Fehler beim Abrufen der Balance-Daten');
+        }
       } catch (error) {
         console.error('Fehler beim Abrufen der Daten:', error);
       }
     };
     fetchData();
-  }, [selectedSymbol]);
+  }, [selectedSymbol, isLoggedIn, username]);
 
+  const handleClosePosition = async (id) => {
+    const positionToClose = openPositions.find((position) => position.id === id);
+    try {
+      const response = await fetch(
+        `http://202.61.243.84:5000/api/orders/close/${id}`,
+        { method: 'POST' }
+      );
+      if (response.ok) {
+        setOpenPositions(openPositions.filter((position) => position.id !== id));
+        setTradeHistory([
+          ...tradeHistory,
+          { ...positionToClose, status: 'Closed', closeTime: new Date().toLocaleString() },
+        ]);
+        alert('Position geschlossen.');
+      } else {
+        console.error('Fehler beim Schließen der Position');
+      }
+    } catch (error) {
+      console.error('Fehler beim Schließen der Position:', error);
+    }
+  };
+  
+  
+  
+  
   const handleTrade = async (type, amount, price) => {
+    setErrorMessage('');
     if (!isLoggedIn) {
-      alert('Sie müssen eingeloggt sein, um handeln zu können.');
+      setErrorMessage('Sie müssen eingeloggt sein, um handeln zu können.');
       return;
     }
 
@@ -66,11 +99,11 @@ const SpotTradingPage = ({ isLoggedIn }) => {
       orderType === 'market' ? parseFloat(orderBook.bids[0]?.[0] || '0') : parseFloat(price);
 
     if (type === 'buy' && balances.USDT < tradePrice * amount) {
-      alert('Nicht genügend USDT.');
+      setErrorMessage('Nicht genügend USDT.');
       return;
     }
     if (type === 'sell' && balances.BTC < amount) {
-      alert('Nicht genügend BTC.');
+      setErrorMessage('Nicht genügend BTC.');
       return;
     }
 
@@ -116,28 +149,6 @@ const SpotTradingPage = ({ isLoggedIn }) => {
     }
   };
 
-  const handleClosePosition = async (id) => {
-    const positionToClose = openPositions.find((position) => position.id === id);
-    try {
-      const response = await fetch(
-        `http://202.61.243.84:5000/api/orders/close/${id}`,
-        { method: 'POST' }
-      );
-      if (response.ok) {
-        setOpenPositions(openPositions.filter((position) => position.id !== id));
-        setTradeHistory([
-          ...tradeHistory,
-          { ...positionToClose, status: 'Closed', closeTime: new Date().toLocaleString() },
-        ]);
-        alert('Position geschlossen.');
-      } else {
-        console.error('Fehler beim Schließen der Position');
-      }
-    } catch (error) {
-      console.error('Fehler beim Schließen der Position:', error);
-    }
-  };
-
   const filteredCoins = coins.filter((coin) =>
     coin.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -146,12 +157,19 @@ const SpotTradingPage = ({ isLoggedIn }) => {
     navigate(`/spot/${newSymbol}`);
   };
 
+
   return (
     <div className="container mx-auto px-6 py-8">
       <h1 className="text-5xl font-bold text-neon-blue text-center mb-8">
         Spot Trading ({selectedSymbol})
       </h1>
 
+      {/* Fehlermeldung anzeigen */}
+      {errorMessage && (
+        <div className="bg-red-500 text-white p-4 rounded mb-4 text-center">
+          {errorMessage}
+          </div>
+          )}
       <div className="grid grid-cols-4 gap-6">
         {/* Coin-Auswahl */}
         <div className="bg-gray-800 p-6 rounded shadow-lg col-span-1">
@@ -185,6 +203,11 @@ const SpotTradingPage = ({ isLoggedIn }) => {
         <div className="col-span-2 bg-gray-800 p-6 rounded shadow-lg">
           <h2 className="text-xl font-bold text-white mb-4">Market Chart</h2>
           <TradingChart symbol={selectedSymbol} interval="5" theme="dark" />
+          <div className="mt-4 bg-gray-700 p-4 rounded text-white">
+            <h3 className="text-xl font-bold">Balance</h3>
+            <p>BTC: {balances.BTC.toFixed(6)}</p>
+            <p>USDT: {balances.USDT.toFixed(2)}</p>
+          </div>
         </div>
 
         {/* Order Book */}
